@@ -1,58 +1,66 @@
 import numpy as np
+from utils import get_center, get_size, get_distance
 
 prev_positions = {}
 
 def process_data(data):
     objects = data["objects"]
-    frame_size = data["frame_size"]
+    timestamp = data["timestamp"]
 
     num_objects = len(objects)
 
-    # -------------------------
-    # 1. 밀도
-    # -------------------------
-    frame_area = frame_size[0] * frame_size[1]
-    density = num_objects / frame_area if frame_area > 0 else 0
-
-    # -------------------------
-    # 2. 평균 속도
-    # -------------------------
     speeds = []
+    distances = []
+    sizes = []
 
+    centers = []
+
+    # -------------------------
+    # 1. center / size / speed
+    # -------------------------
     for obj in objects:
         obj_id = obj["id"]
-        cx, cy = obj["center"]
+        bbox = obj["bbox"]
 
+        center = get_center(bbox)
+        w, h, area = get_size(bbox)
+
+        obj["center"] = center
+        obj["size"] = (w, h, area)
+
+        centers.append(center)
+        sizes.append(area)
+
+        # -------------------------
+        # speed (pixel/frame)
+        # -------------------------
         if obj_id in prev_positions:
-            px, py = prev_positions[obj_id]
-            dist = np.sqrt((cx - px)**2 + (cy - py)**2)
+            prev_center = prev_positions[obj_id]
+            dist = get_distance(center, prev_center)
             speeds.append(dist)
 
-        prev_positions[obj_id] = (cx, cy)
+        prev_positions[obj_id] = center
 
     avg_speed = np.mean(speeds) if speeds else 0
 
     # -------------------------
-    # 3. 충돌 위험 (bbox 겹침)
+    # 2. 객체 간 거리
     # -------------------------
-    collision_risk = 0
+    for i in range(len(centers)):
+        for j in range(i+1, len(centers)):
+            d = get_distance(centers[i], centers[j])
+            distances.append(d)
 
-    for i in range(len(objects)):
-        for j in range(i+1, len(objects)):
-            boxA = objects[i]["bbox"]
-            boxB = objects[j]["bbox"]
+    avg_distance = np.mean(distances) if distances else 0
 
-            xA = max(boxA[0], boxB[0])
-            yA = max(boxA[1], boxB[1])
-            xB = min(boxA[2], boxB[2])
-            yB = min(boxA[3], boxB[3])
-
-            if (xB - xA) > 0 and (yB - yA) > 0:
-                collision_risk += 1
+    # -------------------------
+    # 3. 평균 크기
+    # -------------------------
+    avg_size = np.mean(sizes) if sizes else 0
 
     return {
         "num_objects": num_objects,
-        "density": density,
         "avg_speed": avg_speed,
-        "collision_risk": collision_risk
+        "avg_distance": avg_distance,
+        "avg_size": avg_size
     }

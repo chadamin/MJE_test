@@ -5,11 +5,11 @@ from camera import get_camera, read_frame
 from detector import detect
 from motion import MotionDetector
 from fusion import fuse
-from tracker import SimpleTracker
+from tracker import ByteTrackerWrapper
 from processor import process_data
 
 cap = get_camera()
-tracker = SimpleTracker()
+tracker = ByteTrackerWrapper()
 motion = MotionDetector()
 
 while True:

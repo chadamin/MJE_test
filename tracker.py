@@ -1,35 +1,55 @@
-from utils import get_center, iou
+import numpy as np
 
-class SimpleTracker:
+class ByteTrackerWrapper:
     def __init__(self):
-        self.next_id = 0
-        self.tracks = []
+        from yolox.tracker.byte_tracker import BYTETracker
+
+        class Args:
+            track_thresh = 0.5
+            match_thresh = 0.8
+            track_buffer = 30
+            mot20 = False
+
+        self.tracker = BYTETracker(Args(), frame_rate=30)
 
     def update(self, detections):
-        updated_tracks = []
+        """
+        detections:
+        [
+          {
+            "bbox": [x1,y1,x2,y2],
+            "confidence": 0.9
+          }
+        ]
+        """
 
-        for det in detections:
-            best_match = None
-            best_iou = 0
+        if len(detections) == 0:
+            return []
 
-            for track in self.tracks:
-                i = iou(det["bbox"], track["bbox"])
-                if i > best_iou:
-                    best_iou = i
-                    best_match = track
+        dets = []
 
-            if best_iou > 0.3:
-                best_match["bbox"] = det["bbox"]
-                best_match["center"] = get_center(det["bbox"])
-                updated_tracks.append(best_match)
-            else:
-                track = {
-                    "id": self.next_id,
-                    "bbox": det["bbox"],
-                    "center": get_center(det["bbox"])
-                }
-                self.next_id += 1
-                updated_tracks.append(track)
+        for obj in detections:
+            x1, y1, x2, y2 = obj["bbox"]
+            score = obj.get("confidence", 1.0)
 
-        self.tracks = updated_tracks
-        return self.tracks
+            dets.append([x1, y1, x2, y2, score])
+
+        dets = np.array(dets)
+
+        online_targets = self.tracker.update(dets, (640,480), (640,480))
+
+        results = []
+
+        for t in online_targets:
+            tlwh = t.tlwh
+            tid = t.track_id
+
+            x, y, w, h = tlwh
+            bbox = [int(x), int(y), int(x+w), int(y+h)]
+
+            results.append({
+                "id": tid,
+                "bbox": bbox
+            })
+
+        return results
